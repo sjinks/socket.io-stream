@@ -3,7 +3,7 @@ install:
   - npm install
   - make install
 node_js:
-  - 0.10
+  - 0.120
   - 0.12
   - 4.2
 sudo: false
