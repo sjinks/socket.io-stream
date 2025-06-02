@@ -1,6 +1,6 @@
 {
-  "name": "@wearemothership/socket.io-stream",
-  "version": "0.9.1+0.1.0",
+  "name": "@wwa/socket.io-stream",
+  "version": "0.9.1+0.2.0",
   "description": "stream for socket.io",
   "author": "Naoyuki Kanezawa <naoyuki.kanezawa@gmail.com>",
   "contributors": [
@@ -11,6 +11,11 @@
     {
       "name": "Aaron O'Mullan",
       "email": "aaron.omullan@friendco.de"
+    },
+    {
+      "name": "Volodymyr Kolesnykov",
+      "email": "volodymyr@wildwolf.name",
+      "url": "https://wildwolf.name/"
     }
   ],
   "keywords": [
@@ -23,7 +28,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git://github.com/wearemothership.com/socket.io-stream.git"
+    "url": "git://github.com/sjinks/socket.io-stream.git"
   },
   "scripts": {
     "generate-bundle": "browserify index.js -s ss -o socket.io-stream.js",
