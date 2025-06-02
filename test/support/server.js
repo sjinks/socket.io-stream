@@ -1,8 +1,6 @@
 var fs = require('fs');
-var util = require('util');
 var io = require('socket.io');
 var Checksum = require('./checksum');
-var crypto = require('crypto');
 var ss = require('../../');
 var support = require('./');
 
@@ -72,7 +70,7 @@ function echo(v) {
     return v.pipe(ss.createStream(v.options));
   }
 
-  if (util.isArray(v)) {
+  if (Array.isArray(v)) {
     v = v.map(function(v) {
       return echo(v);
     });
@@ -91,7 +89,7 @@ function sendBack(v) {
     return v.pipe(v);
   }
 
-  if (util.isArray(v)) {
+  if (Array.isArray(v)) {
     v.forEach(sendBack);
   } else if (v && 'object' == typeof v) {
     for (var k in v) {

@@ -31,7 +31,6 @@
     "test": "jest --detectOpenHandles"
   },
   "dependencies": {
-    "component-bind": "^1.0.0",
     "debug": "^4.3.4"
   },
   "devDependencies": {
