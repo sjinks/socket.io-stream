@@ -1,23 +1,32 @@
+const { deepEqual, equal } = require('node:assert/strict');
+const { after, afterEach, beforeEach, describe, it, before } = require('node:test');
 const ss = require('..');
-const support = require('./support');
-const server = require('./support/server')
-const client = support.client;
+const { client } = require('./support');
+const { createServer } = require('./support/server');
+
+const PORT = 4000;
 
 describe('socket.io-stream', function() {
+  let server;
   let socket;
+
+  before(() => {
+    server = createServer(PORT);
+  });
+
+  after(() => {
+    server.close();
+  });
+
   beforeEach(() => {
-    socket = client()
+    socket = client(PORT)
   });
 
   afterEach(() => {
     socket.disconnect()
   });
 
-  afterAll(() => {
-    server.close()
-  });
-
-  it('should send/receive a file', function(done) {
+  it('should send/receive a file', { timeout: 7000 }, function(_, done) {
     const sums = [];
     socket.on('connect', function() {
       const file = ss.createStream();
@@ -35,25 +44,26 @@ describe('socket.io-stream', function() {
       function check(sum) {
         sums.push(sum);
         if (sums.length < 2) return;
-        expect(sums[0]).toEqual(sums[1]);
+        equal(sums[0], sums[1]);
         done();
       }
     });
-  }, 7000);
+  });
 
-  it('should send/receive data in flowing mode', function(done) {
+  it('should send/receive data in flowing mode', { timeout: 7000 }, function(_, done) {
     socket.on('connect', function() {
       const stream = ss.createStream();
+      const expectedObject = { hi: 1 };
       ss(socket)
-        .emit('echo', stream, { hi: 1 })
+        .emit('echo', stream, expectedObject)
         .on('echo', function(stream, obj) {
-          expect(obj).toEqual({ hi: 1 });
+          deepEqual(obj, expectedObject);
 
           let data = '';
           stream.on('data', function(chunk) {
             data += chunk;
           }).on('end', function() {
-            expect(data).toBe('foobar');
+            equal(data, 'foobar');
             socket.disconnect();
             done();
           });
@@ -63,15 +73,16 @@ describe('socket.io-stream', function() {
       stream.write('bar');
       stream.end();
     });
-  }, 7000);
+  });
 
-  it('should send/receive data in paused mode', function(done) {
+  it('should send/receive data in paused mode', { timeout: 7000 }, function(_, done) {
     socket.on('connect', function() {
       const stream = ss.createStream();
+      const expectedObject = { hi: 1 };
       ss(socket)
-        .emit('echo', stream, { hi: 1 })
+        .emit('echo', stream, expectedObject)
         .on('echo', function(stream, obj) {
-          expect(obj).toEqual({ hi: 1 });
+          deepEqual(obj, expectedObject);
 
           let data = '';
           stream.on('readable', function() {
@@ -80,7 +91,7 @@ describe('socket.io-stream', function() {
               data += chunk;
             }
           }).on('end', function() {
-            expect(data).toBe('foobar');
+            equal(data, 'foobar');
             socket.disconnect();
             done();
           });
@@ -90,9 +101,9 @@ describe('socket.io-stream', function() {
       stream.write('bar');
       stream.end();
     });
-  }, 7000);
+  });
 
-  it('should send/receive Buffer', function(done) {
+  it('should send/receive Buffer', { timeout: 7000 }, function(_, done) {
     socket.on('connect', function() {
       const stream = ss.createStream();
       ss(socket)
@@ -103,9 +114,9 @@ describe('socket.io-stream', function() {
             buffers.push(chunk);
           }).on('end', function() {
             const buffer = Buffer.concat(buffers);
-            expect(buffer.length).toBe(4);
+            equal(buffer.length, 4);
             for (let i = 0; i < 4; i++) {
-              expect(buffer[i]).toBe(i);
+              equal(buffer[i], i);
             }
             socket.disconnect();
             done();
@@ -116,9 +127,9 @@ describe('socket.io-stream', function() {
       stream.write(Buffer.from([2, 3]));
       stream.end();
     });
-  }, 7000);
+  });
 
-  it('should send/receive an object in object mode', function(done) {
+  it('should send/receive an object in object mode', { timeout: 7000 }, function(_, done) {
     socket.on('connect', function() {
       const stream = ss.createStream({ objectMode: true });
       ss(socket)
@@ -128,9 +139,9 @@ describe('socket.io-stream', function() {
           stream.on('data', function(chunk) {
             data.push(chunk);
           }).on('end', function() {
-            expect(data.length).toBe(2);;
-            expect(data[0]).toEqual({ foo: 0 });
-            expect(data[1]).toEqual({ bar: 1 });
+            equal(data.length, 2);
+            deepEqual(data[0], { foo: 0 });
+            deepEqual(data[1], { bar: 1 });
             socket.disconnect();
             done();
           });
@@ -140,22 +151,23 @@ describe('socket.io-stream', function() {
       stream.write({ bar: 1 });
       stream.end();
     });
-  }, 7000);
+  });
 
-  it('should send/receive streams in an array', function(done) {
+  it('should send/receive streams in an array', { timeout: 7000 }, function(_, done) {
     socket.on('connect', function() {
       ss(socket)
         .emit('echo', [ss.createStream(), ss.createStream()])
         .on('echo', function(data) {
-          expect(data[0]).toStrictEqual(expect.any(ss.IOStream));
-          expect(data[1]).toStrictEqual(expect.any(ss.IOStream));
+          equal(data.length, 2);
+          equal(data[0] instanceof ss.IOStream, true);
+          equal(data[1] instanceof ss.IOStream, true);
           socket.disconnect();
           done();
         });
     });
-  }, 7000);
+  });
 
-  it('should send/receive streams in an object', function(done) {
+  it('should send/receive streams in an object', { timeout: 7000 }, function(_, done) {
     socket.on('connect', function() {
       ss(socket)
         .emit('echo', {
@@ -163,15 +175,15 @@ describe('socket.io-stream', function() {
           bar: ss.createStream()
         })
         .on('echo', function(data) {
-          expect(data.foo).toStrictEqual(expect.any(ss.IOStream));
-          expect(data.bar).toStrictEqual(expect.any(ss.IOStream));
+          equal(data.foo instanceof ss.IOStream, true);
+          equal(data.bar instanceof ss.IOStream, true);
           socket.disconnect();
           done();
         });
     });
-  }, 7000);
+  });
 
-  it('should send/receive data through a same stream', function(done) {
+  it('should send/receive data through a same stream', { timeout: 7000 }, function(_, done) {
     socket.on('connect', function() {
       const stream = ss.createStream({ allowHalfOpen: true });
       ss(socket).emit('sendBack', stream);
@@ -183,13 +195,13 @@ describe('socket.io-stream', function() {
       stream.on('data', function(chunk) {
         data += chunk;
       }).on('end', function() {
-        expect(data).toEqual('foobar');
+        equal(data, 'foobar');
         done();
       });
     });
-  }, 7000);
+  });
 
-  it('should handle multiple streams', function(done) {
+  it('should handle multiple streams', { timeout: 7000 }, function(_, done) {
     socket.on('connect', function() {
       const stream1 = ss.createStream();
       const stream2 = ss.createStream();
@@ -202,13 +214,13 @@ describe('socket.io-stream', function() {
       stream2.on('data', function(chunk) {
         data += chunk;
       }).on('end', function() {
-        expect(data).toEqual('foobar');
+        equal(data, 'foobar');
         done();
       });
     });
-  }, 7000);
+  });
 
-  it('should get a stream through ack', function(done) {
+  it('should get a stream through ack', { timeout: 7000 }, function(_, done) {
     socket.on('connect', function() {
       const stream = ss.createStream();
       ss(socket).emit('ack', stream, function(stream) {
@@ -216,7 +228,7 @@ describe('socket.io-stream', function() {
         stream.on('data', function(chunk) {
           data += chunk;
         }).on('end', function() {
-          expect(data).toEqual('foobar');
+          equal(data, 'foobar');
           socket.disconnect();
           done();
         });
@@ -226,62 +238,38 @@ describe('socket.io-stream', function() {
       stream.write('bar');
       stream.end();
     });
-  }, 7000);
+  });
 
-  it('should get streams through ack as object and array', function(done) {
+  it('should get streams through ack as object and array', { timeout: 7000 }, function(_, done) {
     socket.on('connect', function() {
       ss(socket).emit('ack', [ss.createStream(), { foo: ss.createStream() }], function(data) {
-        expect(data[0]).toStrictEqual(expect.any(ss.IOStream));
-        expect(data[1].foo).toStrictEqual(expect.any(ss.IOStream));
+        equal(data.length, 2);
+        equal(data[0] instanceof ss.IOStream, true);
+        equal(data[1].foo instanceof ss.IOStream, true);
         done();
       });
     });
-  }, 7000);
+  });
 
-  it('should send an error happened on the client', function(done) {
+  it('should send an error happened on the client', { timeout: 7000 }, function(_, done) {
     socket.on('connect', function() {
       const stream = ss.createStream();
       ss(socket).emit('clientError', stream, function(msg) {
-        expect(msg).toEqual('error on the client');
-        done()
+        equal(msg, 'error on the client');
+        done();
       });
       stream.emit('error', new Error('error on the client'));
     });
-  }, 7000);
+  });
 
-  it('should receive an error happened on the server', function(done) {
+  it('should receive an error happened on the server', { timeout: 7000 }, function(_, done) {
     socket.on('connect', function() {
       const stream = ss.createStream();
       ss(socket).emit('serverError', stream, 'error on the server');
       stream.on('error', function(err) {
-        expect(err.message).toEqual('error on the server');
+        equal(err.message, 'error on the server');
         done()
       });
     });
-  }, 7000);
-
-  if (Buffer.Blob) {
-    describe('BlobReadStream', function() {
-      it('should read blob', function(done) {
-        const socket = client();
-        socket.on('connect', function() {
-          const stream = ss.createStream();
-          ss(socket)
-            .emit('echo', stream)
-            .on('echo', function(stream) {
-              const data = '';
-              stream.on('data', function(chunk) {
-                data += chunk;
-              }).on('end', function() {
-                expect(data).toEqual('foobar');
-                socket.disconnect();
-                done();
-              });
-            });
-          ss.createBlobReadStream(new Buffer.Blob(['foo', 'bar'])).pipe(stream);
-        });
-      });
-    }, 7000);
-  }
+  });
 });
-

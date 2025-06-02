@@ -1,84 +1,74 @@
-var fs = require('fs');
-var util = require('util');
-var io = require('socket.io');
-var Checksum = require('./checksum');
-var crypto = require('crypto');
-var ss = require('../../');
-var support = require('./');
+const { createReadStream } = require('fs');
+const { Server } = require('socket.io');
+const Checksum = require('./checksum');
+const ss = require('../../');
 
-var server;
-if (io.version) {
-  // 0.9.x
-  ss.forceBase64 = true;
-  server = io.listen(support.port, { 'log level': 1 });
-} else {
-  // 1.x.x
-  server = io(support.port);
+function createServer(port) {
+  const server = new Server(port);
+  server.on('connection', function(socket) {
+    ss(socket).on('read', function(stream, path, callback) {
+      const file = createReadStream(__dirname + '/../../' + path);
+      const checksum = new Checksum();
+      file.pipe(checksum).pipe(stream).on('finish', function() {
+        callback(checksum.digest());
+      });
+    });
+
+    ss(socket).on('checksum', function(stream, callback) {
+      const checksum = new Checksum();
+      stream.pipe(checksum).on('finish', function() {
+        callback(checksum.digest());
+      }).resume();
+    });
+
+    ss(socket).on('echo', function(...args) {
+      const s = ss(socket);
+      s.emit('echo', ...echo(args));
+    });
+
+    ss(socket).on('sendBack', function(...args) {
+      sendBack(args);
+    });
+
+    ss(socket).on('multi', function(stream1, stream2) {
+      stream1.pipe(stream2);
+    });
+
+    ss(socket).on('ack', function(...args) {
+      const callback = args.pop();
+      callback.apply(this, echo(args));
+    });
+
+    ss(socket).on('clientError', function(stream, callback) {
+      stream.on('error', function(err) {
+        callback(err.message);
+      });
+    });
+
+    ss(socket).on('serverError', function(stream, msg) {
+      stream.emit('error', new Error(msg));
+    });
+  });
+
+  return server;
 }
 
-module.exports = server;
+module.exports.createServer = createServer;
 
-server.on('connection', function(socket) {
-
-  ss(socket).on('read', function(stream, path, callback) {
-    var file = fs.createReadStream(__dirname + '/../../' + path);
-    var checksum = new Checksum();
-    file.pipe(checksum).pipe(stream).on('finish', function() {
-      callback(checksum.digest());
-    });
-  });
-
-  ss(socket).on('checksum', function(stream, callback) {
-    var checksum = new Checksum();
-    stream.pipe(checksum).on('finish', function() {
-      callback(checksum.digest());
-    }).resume();
-  });
-
-  ss(socket).on('echo', function() {
-    var args = Array.prototype.slice.call(arguments);
-    var s = ss(socket);
-    s.emit.apply(s, ['echo'].concat(echo(args)));
-  });
-
-  ss(socket).on('sendBack', function() {
-    var args = Array.prototype.slice.call(arguments);
-    sendBack(args);
-  });
-
-  ss(socket).on('multi', function(stream1, stream2) {
-    stream1.pipe(stream2);
-  });
-
-  ss(socket).on('ack', function() {
-    var args = Array.prototype.slice.call(arguments);
-    var callback = args.pop();
-    callback.apply(this, echo(args));
-  });
-
-  ss(socket).on('clientError', function(stream, callback) {
-    stream.on('error', function(err) {
-      callback(err.message);
-    });
-  });
-
-  ss(socket).on('serverError', function(stream, msg) {
-    stream.emit('error', new Error(msg));
-  });
-});
-
+/**
+ * @param {unknown} v
+ * @returns {unknown}
+ */
 function echo(v) {
   if (v instanceof ss.IOStream) {
     return v.pipe(ss.createStream(v.options));
   }
 
-  if (util.isArray(v)) {
-    v = v.map(function(v) {
-      return echo(v);
-    });
+  if (Array.isArray(v)) {
+    v = v.map((v) => echo(v));
   } else if (v && 'object' == typeof v) {
-    for (var k in v) {
-      if (v.hasOwnProperty(k)) {
+    for (const k in v) {
+      if (Object.hasOwn(v, k)) {
         v[k] = echo(v[k]);
       }
     }
@@ -86,16 +76,19 @@ function echo(v) {
   return v;
 }
 
+/**
+ * @param {unknown} v
+ */
 function sendBack(v) {
   if (v instanceof ss.IOStream) {
     return v.pipe(v);
   }
 
-  if (util.isArray(v)) {
+  if (Array.isArray(v)) {
     v.forEach(sendBack);
   } else if (v && 'object' == typeof v) {
-    for (var k in v) {
-      if (v.hasOwnProperty(k)) {
+    for (const k in v) {
+      if (Object.hasOwn(v, k)) {
         sendBack(v[k]);
       }
     }

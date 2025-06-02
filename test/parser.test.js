@@ -1,6 +1,8 @@
+const { deepEqual, equal } = require('node:assert/strict');
+const { once } = require('node:events');
+const { describe, it } = require('node:test');
 const ss = require('..');
 const parser = require('../lib/parser');
-const Stream = require('stream').Stream
 
 describe('parser', function() {
   it('should encode/decode a stream', function() {
@@ -8,16 +10,16 @@ describe('parser', function() {
     const decoder = new parser.Decoder();
     const stream = ss.createStream();
     const result = decoder.decode(encoder.encode(stream));
-    expect(result).toStrictEqual(expect.any(ss.IOStream));
-    expect(result).not.toBe(expect.any(Stream));
+    equal(result instanceof ss.IOStream, true);
   });
 
   it('should keep stream options', function() {
+    const options = { highWaterMark: 10, objectMode: true, allowHalfOpen: true };
     const encoder = new parser.Encoder();
     const decoder = new parser.Decoder();
-    const stream = ss.createStream({ highWaterMark: 10, objectMode: true, allowHalfOpen: true })
+    const stream = ss.createStream(options)
     const result = decoder.decode(encoder.encode(stream));
-    expect(result.options).toEqual({ highWaterMark: 10, objectMode: true, allowHalfOpen: true });
+    deepEqual(result.options, options);
   });
 
   it('should encode/decode every streams', function() {
@@ -27,39 +29,39 @@ describe('parser', function() {
       ss.createStream(),
       { foo: ss.createStream() }
     ]));
-    expect(result[0]).toStrictEqual(expect.any(ss.IOStream));
-    expect(result[1].foo).toStrictEqual(expect.any(ss.IOStream));
+
+    equal(result.length, 2);
+    equal(result[0] instanceof ss.IOStream, true);
+    equal(result[1].foo instanceof ss.IOStream, true);
   });
 
   it('should keep non-stream values', function() {
     const encoder = new parser.Encoder();
     const decoder = new parser.Decoder();
-    const result = decoder.decode(encoder.encode([1, 'foo', { foo: 'bar' }, null, undefined]));
-    expect(result).toEqual([1, 'foo', { foo: 'bar' }, null, undefined]);
+    const data = [1, 'foo', { foo: 'bar' }, null, undefined];
+    const result = decoder.decode(encoder.encode(data));
+    deepEqual(result, data);
   });
 
   describe('Encoder', function() {
-    it('should fire stream event', function(done) {
+    it('should fire stream event', async function() {
       const encoder = new parser.Encoder();
       const stream = ss.createStream();
-      encoder.on('stream', function(s) {
-        expect(s).toBe(stream);
-        done();
-      });
+      const promise = once(encoder, 'stream');
       encoder.encode(stream);
+      const [s] = await promise;
+      equal(s, stream);
     });
   });
 
   describe('Decoder', function() {
-    it('should fire stream event', function() {
+    it('should fire stream event', async function() {
       const encoder = new parser.Encoder();
       const decoder = new parser.Decoder();
-      let stream;
-      decoder.on('stream', function(s) {
-        stream = s;
-      });
+      const promise = once(decoder, 'stream');
       const decoded = decoder.decode(encoder.encode(ss.createStream()));
-      expect(stream).toBe(decoded);
+      const [stream] = await promise;
+      equal(stream, decoded);
     });
   });
 });

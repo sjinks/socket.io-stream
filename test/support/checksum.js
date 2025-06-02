@@ -1,22 +1,21 @@
-var util = require('util');
-var crypto = require('crypto');
-var PassThrough = require('stream').PassThrough;
+const { createHash } = require('crypto');
+const { PassThrough } = require('stream');
 
-module.exports = Checksum;
+class Checksum extends PassThrough {
+  constructor(options) {
+    super(options);
+    this.hash = createHash('sha1');
+    this.resume();
+  }
 
-util.inherits(Checksum, PassThrough);
+  _write(chunk, encoding, callback) {
+    this.hash.update(chunk, encoding);
+    super._write(chunk, encoding, callback);
+  }
 
-function Checksum(options) {
-  PassThrough.call(this, options);
-  this.hash = crypto.createHash('sha1');
-  this.resume();
+  digest() {
+    return this.hash.digest('hex');
+  }
 }
 
-Checksum.prototype._write = function(chunk, encoding, callback) {
-  this.hash.update(chunk, encoding);
-  PassThrough.prototype._write.call(this, chunk, encoding, callback);
-};
-
-Checksum.prototype.digest = function() {
-  return this.hash.digest('hex');
-};
+module.exports = Checksum;
