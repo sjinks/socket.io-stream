@@ -26,7 +26,8 @@
     "url": "git://github.com/wearemothership.com/socket.io-stream.git"
   },
   "scripts": {
-    "prepublish": "make build",
+    "generate-bundle": "browserify index.js -s ss -o socket.io-stream.js",
+    "prepublish": "npm run generate-bundle",
     "test": "jest --detectOpenHandles"
   },
   "dependencies": {
