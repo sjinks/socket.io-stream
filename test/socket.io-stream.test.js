@@ -1,118 +1,116 @@
-const io = require('socket.io-client');
+const { equal, throws, ok } = require('node:assert');
+const { after, describe, it, beforeEach, before } = require('node:test');
+const { once } = require('node:events');
+const { setTimeout: wait } = require('node:timers/promises');
 const ss = require('../');
 const parser = require('../lib/parser');
-const server = require('./support/server')
-const client = require('./support').client;
+const { createServer } = require('./support/server');
+const { client } = require('./support');
 
-afterAll(() => {
+const PORT = 4001;
+
+let server;
+before(() => {
+  server = createServer(PORT);
+});
+
+after(() => {
   server.close()
-})
+});
 
 describe('socket.io-stream', function() {
   it('should expose values', function() {
-    expect(ss.Buffer).toBe(Buffer);
-    expect(ss.Socket).toStrictEqual(expect.any(Function));
-    expect(ss.IOStream).toStrictEqual(expect.any(Function));
-    expect(ss.forceBase64).toStrictEqual(expect.any(Boolean));
+    equal(ss.Buffer, Buffer);
+    equal(typeof ss.Socket, 'function');
+    equal(typeof ss.IOStream, 'function');
+    equal(typeof ss.forceBase64, 'boolean');
   });
 
   it('should always return a same instance for a socket', function() {
-    const socket = client({ autoConnect: false });
-    expect(ss(socket)).toEqual(ss(socket));
+    const socket = client(PORT, { autoConnect: false });
+    equal(ss(socket), ss(socket));
   });
 
   it('should throw an error when resending a stream', function() {
-    const socket = ss(client({ autoConnect: false }));
+    const socket = ss(client(PORT, { autoConnect: false }));
     const stream = ss.createStream();
 
     socket.emit('foo', stream);
-    expect(function() {
-      socket.emit('bar', stream);
-    }).toThrow();
+    throws(() => socket.emit('bar', stream));
   });
 
   it('should throw an error when sending destroyed streams', function() {
-    const socket = ss(client({ autoConnect: false }));
+    const socket = ss(client(PORT, { autoConnect: false }));
     const stream = ss.createStream();
 
     stream.destroy();
-    expect(function() {
-      socket.emit('foo', stream);
-    }).toThrow();
+    throws(() => socket.emit('foo', stream));
   });
 
   describe('clean up', function() {
     let socket;
     let streams;
     beforeEach(function() {
-      socket = ss(client({ autoConnect: false }));
-      streams = function() {
-        return Object.keys(socket.streams);
-      };
+      socket = ss(client(PORT, { autoConnect: false }));
+      streams = () => Object.keys(socket.streams);
     });
 
     describe('local streams', function() {
-      let stream
+      let stream;
       beforeEach(function() {
         stream = ss.createStream();
         socket.emit('foo', stream);
-        expect(streams()).toHaveLength(1);
+        equal(streams().length, 1)
       });
 
       it('should be cleaned up on error', function() {
         stream.emit('error', new Error());
-        expect(streams()).toHaveLength(0);
+        equal(streams().length, 0)
       });
 
-      it('should be cleaned up on finish', function(done) {
-        stream.on('end', function() {
-          expect(streams()).toHaveLength(0);
-          done();
-        });
+      it('should be cleaned up on finish', async function() {
         stream.emit('finish');
+        await once(stream, 'end');
+        equal(streams().length, 0);
       });
 
-      it('should be cleaned up on end', function(done) {
+      it('should be cleaned up on end', async function() {
         stream.emit('end');
-        setTimeout(() => {
-          expect(streams()).toHaveLength(0);
-          done();
-        }, 100)
+        await wait(0);
+        equal(streams().length, 0);
       });
     });
 
     describe('remote streams', function() {
-      let stream
-      beforeEach(function(done) {
-        socket.on('foo', function(streamIn) {
-          expect(streams()).toHaveLength(1);
-          stream = streamIn
-          done();
+      let stream;
+      beforeEach(function() {
+        return new Promise((resolve) => {
+          socket.on('foo', function(streamIn) {
+            equal(streams().length, 1);
+            stream = streamIn;
+            setImmediate(resolve);
+          });
+
+          const encoder = new parser.Encoder();
+          socket.$emit('foo', encoder.encode(ss.createStream()));
         });
-        // emit a new stream event manually.
-        const encoder = new parser.Encoder();
-        socket.$emit('foo', encoder.encode(ss.createStream()));
       });
 
       it('should be cleaned up on error', function() {
         stream.emit('error', new Error());
-        expect(streams()).toHaveLength(0);
+        equal(streams().length, 0)
       });
 
-      it('should be cleaned up on finish', function(done) {
-        stream.on('end', function() {
-          expect(streams()).toHaveLength(0);
-          done();
-        });
+      it('should be cleaned up on finish', async function() {
         stream.emit('finish');
+        await once(stream, 'end');
+        equal(streams().length, 0);
       });
 
-      it('should be cleaned up on end', function(done) {
+      it('should be cleaned up on end', async function() {
         stream.emit('end');
-        setTimeout(() => {
-          expect(streams()).toHaveLength(0);
-          done();
-        }, 100)
+        await wait(0);
+        equal(streams().length, 0);
       });
     });
 
@@ -120,29 +118,30 @@ describe('socket.io-stream', function() {
       it('should clean up local streams only after both "finish" and "end" were called', function() {
         const stream = ss.createStream({ allowHalfOpen: true });
         socket.emit('foo', stream);
-        expect(streams()).toHaveLength(1);
+        equal(streams().length, 1)
 
         stream.emit('end');
-        expect(streams()).toHaveLength(1);
+        equal(streams().length, 1)
 
         stream.emit('finish');
-        expect(streams()).toHaveLength(0);
+        equal(streams().length, 0)
       });
 
-      it('should clean up remote streams only after both "finish" and "end" were called', function(done) {
-        socket.on('foo', function(stream) {
-          expect(streams()).toHaveLength(1);
+      it('should clean up remote streams only after both "finish" and "end" were called', async function() {
+        const promise = once(socket, 'foo');
 
-          stream.emit('end');
-          expect(streams()).toHaveLength(1);
-
-          stream.emit('finish');
-          expect(streams()).toHaveLength(0);
-          done();
-        });
         // emit a new stream event manually.
         const encoder = new parser.Encoder();
         socket.$emit('foo', encoder.encode(ss.createStream({ allowHalfOpen: true })));
+
+        const [stream] = await promise;
+        equal(streams().length, 1)
+
+        stream.emit('end');
+        equal(streams().length, 1)
+
+        stream.emit('finish');
+        equal(streams().length, 0)
       });
     });
   });
@@ -150,7 +149,7 @@ describe('socket.io-stream', function() {
   // TODO: Don't know how to make socket.IO emit errors now (old way doesn't work any more)
   // describe('when socket.io has an error', function() {
   //   it.only('should propagate the error', function(done) {
-  //     const sio = client({ autoConnect: false });
+  //     const sio = client(PORT, { autoConnect: false });
   //     const socket = ss(sio);
   //     socket.on('error', function(err) {
   //       expect(err).toStrictEqual(expect.any(Error));
@@ -161,37 +160,36 @@ describe('socket.io-stream', function() {
   // });
 
   describe('when socket.io is disconnected', function() {
-    let socket
-    let sio
-    let stream
-    beforeEach(function(done) {
-      sio = client();
+    let socket;
+    let sio;
+    let stream;
+    beforeEach(async function() {
+      sio = client(PORT);
       socket = ss(sio);
+      const promise = once(sio, 'connect');
       stream = ss.createStream();
       socket.emit('foo', stream);
-      setTimeout(done, 500) // Wait for server to finish setting up (otherwise disconnect doesn't fire)
+      await promise;
     });
 
-    it('should destroy streams', function(done) {
+    it('should destroy streams', async function() {
+      const promise = once(stream, 'close');
       sio.disconnect();
-      setTimeout(() => {
-        expect(stream.destroyed).toBeTruthy();
-        done();
-      }, 1000);
+      await promise;
+      ok(stream.destroyed);
     });
 
-    it('should trigger close event', function(done) {
-      stream.on('close', done);
+    it('should trigger close event', async function() {
+      const promise = once(stream, 'close');
       sio.disconnect();
+      await promise;
     });
 
-    it('should trigger error event', function(done) {
-      stream.on('error', function(err) {
-        expect(err).toStrictEqual(expect.any(Error));
-        done();
-      });
+    it('should trigger error event', async function() {
+      const promise = once(stream, 'error');
       sio.disconnect();
+      const [err] = await promise;
+      equal(err instanceof Error, true);
     });
   });
 });
-

@@ -1,58 +1,19 @@
-var io = require('socket.io-client');
-var ss = require('../../');
+const { io } = require('socket.io-client');
 
-exports.port = process.env.ZUUL_PORT || 4000;
+/**
+ * @param {number} port
+ * @param {object} [options]
+ */
+exports.client = function(port, options) {
+  options = options || {};
 
-var isBrowser = !!global.window;
-var defaultURI = isBrowser ? '' : 'http://localhost:' + exports.port;
-
-if (io.version) {
-  ss.forceBase64 = true;
-
-  var optionMap = {
-    autoConnect: 'auto connect',
-    forceNew: 'force new connection',
-    reconnection: 'reconnect'
+  const _options = {
+    forceNew: true
   };
 
-  // 0.9.x
-  exports.client = function(uri, options) {
-    if ('object' === typeof uri) {
-      options = uri;
-      uri = null;
-    }
-    uri = uri || defaultURI;
-    options = options || {};
+  for (const key in options) {
+    _options[key] = options[key];
+  }
 
-    var _options = {
-      'force new connection': true
-    };
-
-    for (var key in options) {
-      _options[optionMap[key] || key] = options[key];
-    }
-
-    return io.connect(uri, _options);
-  };
-
-} else {
-  // 1.x.x
-
-  exports.client = function(uri, options) {
-    if ('object' === typeof uri) {
-      options = uri;
-      uri = null;
-    }
-    uri = uri || defaultURI;
-    options = options || {};
-
-    var _options = {
-      forceNew: true
-    };
-    for (var key in options) {
-      _options[key] = options[key];
-    }
-
-    return io(uri, _options);
-  };
-}
+  return io(`http://localhost:${port}`, _options);
+};
