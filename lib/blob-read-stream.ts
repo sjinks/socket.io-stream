@@ -1,25 +1,27 @@
-const { Readable } = require('stream');
+import { Readable, type ReadableOptions } from 'stream';
+
+export interface BlobReadStreamOptions extends ReadableOptions{
+  synchronous?: boolean;
+}
 
 /**
  * Readable stream for Blob and File on browser.
  */
-class BlobReadStream extends Readable {
+export default class BlobReadStream extends Readable {
+  private readonly blob: Blob;
+  private start = 0;
+  private readonly sync: boolean;
+  private readonly fileReader: FileReader | FileReaderSync;
+
   /**
-   * @param {Blob} blob - Blob or File object
-   * @param {Object} [options] - Stream options
-   * @param {boolean} [options.synchronous] - Use synchronous FileReader
    * @api private
    */
-  constructor(blob, options = {}) {
+  public constructor(blob: Blob, options: BlobReadStreamOptions = {}) {
     // Extract stream-specific options from options object
     const { synchronous, ...streamOptions } = options;
     super(streamOptions);
 
     this.blob = blob;
-    // Handle legacy browser slice methods with type safety
-    this.slice = blob.slice || 
-                 (blob.webkitSlice && blob.webkitSlice.bind(blob)) || 
-                 (blob.mozSlice && blob.mozSlice.bind(blob));
     this.start = 0;
     this.sync = synchronous || false;
 
@@ -29,25 +31,25 @@ class BlobReadStream extends Readable {
     } else {
       this.fileReader = new FileReader();
       this.sync = false; // Force async if sync not available
-      this.fileReader.onload = (e) => this._onload(e);
-      this.fileReader.onerror = (e) => this._onerror(e);
+
+      this.fileReader.addEventListener('load', this._onload);
+      this.fileReader.addEventListener('error', this._onerror);
     }
   }
 
   /**
    * Read implementation for Readable stream
    *
-   * @param {number} size - Size to read
    * @api private
    */
-  _read(size) {
+  public override _read(size: number): void {
     const start = this.start;
     const end = this.start = this.start + size;
-    const chunk = this.slice.call(this.blob, start, end);
+    const chunk = this.blob.slice(start, end);
 
     if (chunk.size) {
       if (this.sync) {
-        const result = this.fileReader.readAsArrayBuffer(chunk);
+        const result = (this.fileReader as FileReaderSync).readAsArrayBuffer(chunk);
         const bufferChunk = Buffer.from(new Uint8Array(result));
         this.push(bufferChunk);
       } else {
@@ -61,10 +63,9 @@ class BlobReadStream extends Readable {
   /**
    * Handle FileReader load event
    *
-   * @param {ProgressEvent} e - Load event
    * @api private
    */
-  _onload(e) {
+  private readonly _onload = (e: ProgressEvent<FileReader>): void => {
     if (e.target && e.target.result instanceof ArrayBuffer) {
       const chunk = Buffer.from(new Uint8Array(e.target.result));
       this.push(chunk);
@@ -74,15 +75,11 @@ class BlobReadStream extends Readable {
   /**
    * Handle FileReader error event
    *
-   * @param {ProgressEvent} e - Error event
    * @api private
    */
-  _onerror(e) {
-    if (e.target && e.target.error) {
+  private readonly _onerror = (e: ProgressEvent<FileReader>): void => {
+    if (e.target?.error) {
       this.emit('error', e.target.error);
     }
   }
 }
-
-module.exports = BlobReadStream;
-

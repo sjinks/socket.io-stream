@@ -1,33 +1,39 @@
-const { Duplex } = require('stream');
-const uuid = require('./uuid');
-const debug = require('debug')('socket.io-stream:iostream');
+import { Duplex, type DuplexOptions } from 'stream';
+import uuid from './uuid';
+import dbg from 'debug';
+import Socket from './socket';
+
+const debug = dbg('socket.io-stream:iostream');
+
+type PushFunction = () => boolean;
+type WriteFunction = () => void;
 
 /**
  * Duplex stream for socket.io-stream
  */
 class IOStream extends Duplex {
+  public options: DuplexOptions;
+  public id: string;
+
+  public socket: Socket | null = null;
+  private readonly pushBuffer: PushFunction[] = [];
+  private readonly writeBuffer: WriteFunction[] = [];
+
+  private _readable: boolean = false;
+  private _writable: boolean = false;
+
   /**
-   * @param {Object} [options] - Stream options
    * @api private
    */
-  constructor(options) {
+  public constructor(options: DuplexOptions = {}) {
     super(options);
-
     this.options = options;
+
     this.id = uuid();
     this.socket = null;
 
-    // Buffers
-    this.pushBuffer = [];
-    this.writeBuffer = [];
-
-    // Op states
-    this._readable = false;
-    this._writable = false;
-    this.destroyed = false;
-
     // default to *not* allowing half open sockets
-    this.allowHalfOpen = (options && options.allowHalfOpen) || false;
+    this.allowHalfOpen = options?.allowHalfOpen ?? false;
 
     this.on('finish', this._onfinish);
     this.on('end', this._onend);
@@ -40,7 +46,7 @@ class IOStream extends Duplex {
    *
    * @api public
    */
-  destroy() {
+  public override destroy(): this {
     debug('destroy');
 
     if (this.destroyed) {
@@ -48,7 +54,9 @@ class IOStream extends Duplex {
       return this;
     }
 
-    this.readable = this.writable = false;
+    this.readable = false;
+    // @ts-expect-error -- it is not readonly
+    this.writable = false;
 
     if (this.socket) {
       debug('clean up');
@@ -57,7 +65,7 @@ class IOStream extends Duplex {
     }
 
     this.destroyed = true;
-    return this;
+    return super.destroy();
   }
 
   /**
@@ -65,15 +73,18 @@ class IOStream extends Duplex {
    *
    * @api private
    */
-  _read(size) {
-    // We can not read from the socket if it's destroyed obviously ...
-    if (this.destroyed) return;
+  public override _read(size: number): void {
+    if (this.destroyed) {
+      return;
+    }
 
     if (this.pushBuffer.length) {
       // flush buffer and end if it exists.
       let push;
       while ((push = this.pushBuffer.shift())) {
-        if (!push()) break;
+        if (!push()) {
+          break;
+        }
       }
       return;
     }
@@ -82,7 +93,7 @@ class IOStream extends Duplex {
 
     // Go get data from remote stream
     // Calls ._onread remotely then ._onwrite locally
-    this.socket._read(this.id, size);
+    this.socket?._read(this.id, size);
   }
 
   /**
@@ -90,11 +101,13 @@ class IOStream extends Duplex {
    *
    * @api private
    */
-  _onread(size) {
+  _onread() {
     const write = this.writeBuffer.shift();
-    if (write) return write();
-
-    this._writable = true;
+    if (write) {
+      write();
+    } else {
+      this._writable = true;
+    }
   }
 
   /**
@@ -103,13 +116,15 @@ class IOStream extends Duplex {
    *
    * @api private
    */
-  _write(chunk, encoding, callback) {
-    const write = () => {
-      // We can not write to the socket if it's destroyed obviously ...
-      if (this.destroyed) return;
+  public override _write(chunk: unknown, encoding: BufferEncoding, callback: (error?: Error | null) => void) {
+    super._write(chunk, encoding, callback);
+    const write: WriteFunction = (): void => {
+      if (this.destroyed) {
+        return;
+      }
 
       this._writable = false;
-      this.socket._write(this.id, chunk, encoding, callback);
+      this.socket?._write(this.id, chunk, encoding, callback);
     };
 
     if (this._writable) {
@@ -125,10 +140,10 @@ class IOStream extends Duplex {
    *
    * @api private
    */
-  _onwrite(chunk, encoding, callback) {
-    const push = () => {
+  _onwrite(chunk: unknown, encoding: BufferEncoding, callback: (error?: Error | null) => void): void {
+    const push: PushFunction = (): boolean => {
       this._readable = false;
-      const ret = this.push(chunk || '', encoding);
+      const ret = this.push(chunk ?? '', encoding);
       callback();
       return ret;
     };
@@ -145,9 +160,8 @@ class IOStream extends Duplex {
    *
    * @api private
    */
-  _end() {
+  public _end(): void {
     if (this.pushBuffer.length) {
-      // end after flushing buffer.
       this.pushBuffer.push(() => this._done());
     } else {
       this._done();
@@ -159,7 +173,7 @@ class IOStream extends Duplex {
    *
    * @api private
    */
-  _done() {
+  public _done(): boolean {
     this._readable = false;
     // signal the end of the data.
     return this.push(null);
@@ -175,20 +189,22 @@ class IOStream extends Duplex {
    *
    * @api private
    */
-  _onfinish() {
+  public _onfinish = (): void => {
     debug('_onfinish');
     // Local socket just finished
     // send 'end' event to remote
-    if (this.socket) {
-      this.socket._end(this.id);
-    }
+    this.socket?._end(this.id);
 
+    // @ts-expect-error
     this.writable = false;
+    // @ts-expect-error
     this._writableState.ended = true;
 
+    // @ts-expect-error
     if (!this.readable || this._readableState.ended) {
-      debug('_onfinish: ended, destroy %s', this._readableState);
-      return this.destroy();
+      debug('_onfinish: ended, destroy');
+      this.destroy();
+      return;
     }
 
     debug('_onfinish: not ended');
@@ -197,6 +213,7 @@ class IOStream extends Duplex {
       this.push(null);
 
       // just in case we're waiting for an EOF.
+      // @ts-expect-error
       if (this.readable && !this._readableState.endEmitted) {
         this.read(0);
       }
@@ -210,14 +227,17 @@ class IOStream extends Duplex {
    *
    * @api private
    */
-  _onend() {
+  private readonly _onend = (): void => {
     debug('_onend');
     this.readable = false;
+    // @ts-expect-error
     this._readableState.ended = true;
 
+    // @ts-expect-error
     if (!this.writable || this._writableState.finished) {
-      debug('_onend: %s', this._writableState);
-      return this.destroy();
+      debug('_onend');
+      this.destroy();
+      return;
     }
 
     debug('_onend: not finished');
@@ -235,7 +255,7 @@ class IOStream extends Duplex {
    *
    * @api private
    */
-  _onerror(err) {
+  private readonly _onerror = (err: Error & { remote?: boolean }): void => {
     // check if the error came from remote stream.
     if (!err.remote && this.socket) {
       // notify the error to the corresponding remote stream.
@@ -243,7 +263,7 @@ class IOStream extends Duplex {
     }
 
     this.destroy();
-  }
+  };
 }
 
-module.exports = IOStream;
+export = IOStream;

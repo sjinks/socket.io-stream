@@ -1,14 +1,14 @@
-const { deepEqual, equal } = require('node:assert/strict');
-const { after, afterEach, beforeEach, describe, it, before } = require('node:test');
-const ss = require('..');
-const { client } = require('./support');
-const { createServer } = require('./support/server');
+import { deepEqual, equal } from 'node:assert/strict';
+import { after, afterEach, beforeEach, describe, it, before } from 'node:test';
+import ss from '../lib/index';
+import { client } from './support/index';
+import { createServer } from './support/server';
 
 const PORT = 4000;
 
 describe('socket.io-stream', function() {
-  let server;
-  let socket;
+  let server: ReturnType<typeof createServer>;
+  let socket: ReturnType<typeof client>;
 
   before(() => {
     server = createServer(PORT);
@@ -19,34 +19,39 @@ describe('socket.io-stream', function() {
   });
 
   beforeEach(() => {
-    socket = client(PORT)
+    socket = client(PORT);
   });
 
   afterEach(() => {
-    socket.disconnect()
+    socket.disconnect();
   });
 
   it('should send/receive a file', { timeout: 7000 }, function(_, done) {
-    const sums = [];
+    const sums: string[] = [];
+    const check = (sum: string) => {
+      console.log('check');
+      sums.push(sum);
+      if (sums.length < 2) {
+        return;
+      }
+
+      equal(sums[0], sums[1]);
+      done();
+    };
+
     socket.on('connect', function() {
+      console.log('connect');
       const file = ss.createStream();
-      ss(socket).emit('read', file, 'test/support/frog.jpg', function(sum) {
+      ss(socket).emit('read', file, 'test/support/frog.jpg', function(sum: string) {
         check(sum);
       });
 
       const checksum = ss.createStream();
-      ss(socket).emit('checksum', checksum, function(sum) {
+      ss(socket).emit('checksum', checksum, function(sum: string) {
         check(sum);
       });
 
       file.pipe(checksum);
-
-      function check(sum) {
-        sums.push(sum);
-        if (sums.length < 2) return;
-        equal(sums[0], sums[1]);
-        done();
-      }
     });
   });
 

@@ -1,6 +1,11 @@
-const { EventEmitter } = require('events');
-const parser = require('./parser');
-const debug = require('debug')('socket.io-stream:socket');
+import { EventEmitter } from 'events';
+import type { Socket as SocketIOServerSocket } from 'socket.io';
+import type { Socket as SocketIOClientSocket } from 'socket.io-client';
+import { Decoder, Encoder } from './parser';
+import dbg from 'debug';
+import IOStream from './iostream';
+
+const debug = dbg('socket.io-stream:socket');
 
 /**
  * Base event name for messaging.
@@ -15,26 +20,31 @@ const RESERVED_EVENTS = [
   'removeListener'
 ];
 
+export interface SocketOptions {
+  forceBase64?: boolean;
+}
+
 /**
  * Bidirectional stream socket which wraps Socket.IO.
  */
-class Socket extends EventEmitter {
-  /**
-   * @param {import('socket.io').Socket} sio - Socket.IO socket instance
-   * @param {Object} [options] - Configuration options
-   * @param {boolean} [options.forceBase64] - Force base64 encoding
-   */
-  constructor(sio, options = {}) {
+export default class Socket extends EventEmitter {
+  private readonly sio: SocketIOServerSocket | SocketIOClientSocket;
+  private readonly forceBase64: boolean;
+  private readonly streams: Record<string, any>;
+  private readonly encoder: Encoder;
+  private readonly decoder: Decoder;
+
+  public constructor(sio: SocketIOServerSocket | SocketIOClientSocket, options: SocketOptions = {}) {
     super();
 
     this.sio = sio;
     this.forceBase64 = Boolean(options.forceBase64);
     this.streams = {};
-    this.encoder = new parser.Encoder();
-    this.decoder = new parser.Decoder();
+    this.encoder = new Encoder();
+    this.decoder = new Decoder();
 
     // Bind Socket.IO events
-    sio.on(EVENT_NAME, (...args) => super.emit(...args));
+    sio.on(EVENT_NAME, (type: string | symbol, ...args: unknown[]) => super.emit(type, ...args));
     sio.on(`${EVENT_NAME}-read`, this._onread);
     sio.on(`${EVENT_NAME}-write`, this._onwrite);
     sio.on(`${EVENT_NAME}-end`, this._onend);
@@ -47,7 +57,7 @@ class Socket extends EventEmitter {
     this.decoder.on('stream', this._ondecode);
   }
 
-  $emit(type, ...args) {
+  public $emit(type: string | symbol, ...args: unknown[]): boolean {
     return super.emit(type, ...args);
   }
 
@@ -55,28 +65,23 @@ class Socket extends EventEmitter {
    * Emits streams to this corresponding server/client.
    * Overrides EventEmitter.emit to handle stream events specially.
    *
-   * @param {string} type - Event type
-   * @param {...any} args - Arguments to emit
-   * @return {this} self for chaining
    * @api public
    */
-  emit(type, ...args) {
+  // @ts-expect-error -- should have returned boolean
+  public override emit(type: string, ...args: unknown[]): this {
     if (RESERVED_EVENTS.includes(type)) {
       super.emit(type, ...args);
-      return this;
+    } else {
+      this._stream(type, ...args);
     }
-    this._stream(type, ...args);
+
     return this;
   }
 
   /**
    * Add event listener with stream support.
-   *
-   * @param {string} type - Event type
-   * @param {(...args: any[]) => void} listener - Event listener
-   * @return {this} self
    */
-  on(type, listener) {
+  public override on(type: string, listener: (...args: any[]) => void): this {
     if (RESERVED_EVENTS.includes(type)) {
       return super.on(type, listener);
     }
@@ -92,29 +97,27 @@ class Socket extends EventEmitter {
    * @param {...any} args - Arguments including streams
    * @api private
    */
-  _stream(type, ...args) {
+  _stream(type: string, ...args: unknown[]): void {
     debug('sending new streams');
 
     const ack = args[args.length - 1];
     if (typeof ack === 'function') {
-      args[args.length - 1] = (...ackArgs) => {
+      args[args.length - 1] = (...ackArgs: unknown[]) => {
         const decodedArgs = this.decoder.decode(ackArgs);
         ack.apply(this, decodedArgs);
       };
     }
 
-    const encodedArgs = this.encoder.encode(args);
+    const encodedArgs: unknown[] = this.encoder.encode(args);
     this.sio.emit(EVENT_NAME, type, ...encodedArgs);
   }
 
   /**
    * Notifies the read event.
    *
-   * @param {string} id - Stream ID
-   * @param {number} size - Read size
    * @api private
    */
-  _read(id, size) {
+  _read(id: string, size: number): void {
     this.sio.emit(`${EVENT_NAME}-read`, id, size);
   }
 
@@ -127,7 +130,7 @@ class Socket extends EventEmitter {
    * @param {Function} callback - Callback function
    * @api private
    */
-  _write(id, chunk, encoding, callback) {
+  _write(id: string, chunk: unknown, encoding: BufferEncoding, callback: (error?: Error | null) => void): void {
     if (Buffer.isBuffer(chunk)) {
       if (this.forceBase64) {
         encoding = 'base64';
@@ -150,7 +153,7 @@ class Socket extends EventEmitter {
    * @param {string} id - Stream ID
    * @api private
    */
-  _end(id) {
+  public _end(id: string) {
     this.sio.emit(`${EVENT_NAME}-end`, id);
   }
 
@@ -161,7 +164,7 @@ class Socket extends EventEmitter {
    * @param {Error|string} err - Error object or message
    * @api private
    */
-  _error(id, err) {
+  public _error(id: string, err: Error | string) {
     const message = typeof err === 'string' ? err : err.message || String(err);
     this.sio.emit(`${EVENT_NAME}-error`, id, message);
   }
@@ -173,17 +176,17 @@ class Socket extends EventEmitter {
    * @param {(...args: any[]) => void} listener - Event listener
    * @api private
    */
-  _onstream(type, listener) {
+  _onstream(type: string, listener: (...args: unknown[]) => void): void {
     if (typeof listener !== 'function') {
       throw new TypeError('listener must be a function');
     }
 
-    const onstream = (...args) => {
+    const onstream = (...args: unknown[]) => {
       debug('new streams');
 
       const ack = args[args.length - 1];
       if (typeof ack === 'function') {
-        args[args.length - 1] = (...ackArgs) => {
+        args[args.length - 1] = (...ackArgs: unknown[]) => {
           const encodedArgs = this.encoder.encode(ackArgs);
           ack.apply(this, encodedArgs);
         };
@@ -206,7 +209,7 @@ class Socket extends EventEmitter {
    * @param {number} size - Read size
    * @api private
    */
-  _onread = (id, size) => {
+  _onread = (id: string, size: number): void => {
     debug('read: "%s"', id);
 
     const stream = this.streams[id];
@@ -226,7 +229,7 @@ class Socket extends EventEmitter {
    * @param {Function} callback - Callback function
    * @api private
    */
-  _onwrite = (id, chunk, encoding, callback) => {
+  _onwrite = (id: string, chunk: unknown, encoding: BufferEncoding, callback: (error?: string | Error | null) => void) => {
     debug('write: "%s"', id);
 
     const stream = this.streams[id];
@@ -248,7 +251,7 @@ class Socket extends EventEmitter {
    * @param {string} id - Stream ID
    * @api private
    */
-  _onend = (id) => {
+  _onend = (id: string): void => {
     debug('end: "%s"', id);
 
     const stream = this.streams[id];
@@ -267,7 +270,7 @@ class Socket extends EventEmitter {
    * @param {string} message - Error message
    * @api private
    */
-  _onerror = (id, message) => {
+  _onerror = (id: string, message: string) => {
     debug('error: "%s", "%s"', id, message);
 
     const stream = this.streams[id];
@@ -306,7 +309,7 @@ class Socket extends EventEmitter {
    * @param {import('./iostream')} stream - Stream instance
    * @api private
    */
-  _onencode = (stream) => {
+  _onencode = (stream: IOStream) => {
     if (stream.socket || stream.destroyed) {
       throw new Error('stream has already been sent.');
     }
@@ -326,7 +329,7 @@ class Socket extends EventEmitter {
    * @param {import('./iostream')} stream - Stream instance
    * @api private
    */
-  _ondecode = (stream) => {
+  _ondecode = (stream: IOStream) => {
     const { id } = stream;
     if (this.streams[id]) {
       this._error(id, new Error(`Decoded stream already exists: ${id}`));
@@ -343,12 +346,9 @@ class Socket extends EventEmitter {
    * @param {string} id - Stream ID
    * @api public
    */
-  cleanup(id) {
+  cleanup(id: string) {
     delete this.streams[id];
   }
 }
 
-// Export the Socket class and constants
-module.exports = Socket;
-module.exports.event = EVENT_NAME;
-module.exports.events = RESERVED_EVENTS;
+export { EVENT_NAME as event, RESERVED_EVENTS as events };

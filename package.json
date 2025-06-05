@@ -36,11 +36,16 @@
     "test": "node --test"
   },
   "dependencies": {
+    "@lando/cli": "github:Automattic/lando-cli",
     "debug": "^4.3.4"
   },
   "devDependencies": {
+    "@types/debug": "^4.1.12",
+    "@types/node": "^22.15.29",
     "browserify": "^17.0.0",
     "socket.io": "^4.5.1",
-    "socket.io-client": "^4.5.1"
+    "socket.io-client": "^4.5.1",
+    "tsimp": "^2.0.12",
+    "typescript": "^5.8.3"
   }
 }
