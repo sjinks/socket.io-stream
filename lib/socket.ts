@@ -20,14 +20,14 @@ const RESERVED_EVENTS = [
   'removeListener'
 ];
 
-export interface SocketOptions {
+interface SocketOptions {
   forceBase64?: boolean;
 }
 
 /**
  * Bidirectional stream socket which wraps Socket.IO.
  */
-export default class Socket extends EventEmitter {
+class Socket extends EventEmitter {
   private readonly sio: SocketIOServerSocket | SocketIOClientSocket;
   private readonly forceBase64: boolean;
   private readonly streams: Record<string, any>;
@@ -351,4 +351,6 @@ export default class Socket extends EventEmitter {
   }
 }
 
-export { EVENT_NAME as event, RESERVED_EVENTS as events };
+export = Socket;
+Socket.event = EVENT_NAME;
+Socket.events = RESERVED_EVENTS;
