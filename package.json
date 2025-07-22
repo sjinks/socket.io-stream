@@ -30,6 +30,11 @@
     "type": "git",
     "url": "git://github.com/sjinks/socket.io-stream.git"
   },
+  "files": [
+    "index.js",
+    "socket.io-stream.js",
+    "lib/*.js"
+  ],
   "scripts": {
     "generate-bundle": "browserify index.js -s ss -o socket.io-stream.js",
     "prepublish": "npm run generate-bundle",
@@ -42,5 +47,9 @@
     "browserify": "^17.0.1",
     "socket.io": "^4.8.1",
     "socket.io-client": "^4.8.1"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   }
 }
