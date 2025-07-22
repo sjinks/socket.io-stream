@@ -1,13 +1,14 @@
 # Socket.IO stream
 
-[![Build Status](https://travis-ci.org/nkzawa/socket.io-stream.png?branch=master)](https://travis-ci.org/nkzawa/socket.io-stream)
-[![NPM version](https://badge.fury.io/js/socket.io-stream.png)](http://badge.fury.io/js/socket.io-stream)
+[![Build and Test](https://github.com/sjinks/socket.io-stream/actions/workflows/build.yml/badge.svg)](https://github.com/sjinks/socket.io-stream/actions/workflows/build.yml)
 
 This is the module for bidirectional binary data transfer with Stream API through [Socket.IO](https://github.com/socketio/socket.io).
 
 ## Installation
 
-    npm install socket.io-stream
+```shell
+npm install @wwa/socket.io-stream
+```
 
 ## Usage
 
@@ -20,13 +21,13 @@ To receive streams, you just wrap `socket` with `socket.io-stream`, then listen 
 Server:
 
 ```js
-var io = require('socket.io').listen(80);
-var ss = require('socket.io-stream');
-var path = require('path');
+const io = require('socket.io').listen(80);
+const ss = require('@wwa/socket.io-stream');
+const path = require('path');
 
 io.of('/user').on('connection', function(socket) {
   ss(socket).on('profile-image', function(stream, data) {
-    var filename = path.basename(data.name);
+    const filename = path.basename(data.name);
     stream.pipe(fs.createWriteStream(filename));
   });
 });
@@ -37,12 +38,12 @@ io.of('/user').on('connection', function(socket) {
 Client:
 
 ```js
-var io = require('socket.io-client');
-var ss = require('socket.io-stream');
+const io = require('socket.io-client');
+const ss = require('@wwa/socket.io-stream');
 
-var socket = io.connect('http://example.com/user');
-var stream = ss.createStream();
-var filename = 'profile.jpg';
+const socket = io.connect('http://example.com/user');
+const stream = ss.createStream();
+const filename = 'profile.jpg';
 
 ss(socket).emit('profile-image', stream, {name: filename});
 fs.createReadStream(filename).pipe(stream);
@@ -65,13 +66,15 @@ stream.pipe(fs.createWriteStream('file.txt'));
 
 This module can be used on the browser. To do so, just copy a file to a public directory.
 
-    $ cp node_modules/socket.io-stream/socket.io-stream.js somewhere/public/
+    $ cp node_modules/@wwa/socket.io-stream/socket.io-stream.js somewhere/public/
 
 You can also use [browserify](http://github.com/substack/node-browserify) to create your own bundle.
 
-    $ npm install browserify -g
-    $ cd node_modules/socket.io-stream
-    $ browserify index.js -s ss > socket.io-stream.js
+```sh
+npm install browserify -g
+cd node_modules/@wwa/socket.io-stream
+browserify index.js -s ss -o socket.io-stream.js
+```
 
 ```html
 <input id="file" type="file" />
@@ -81,11 +84,11 @@ You can also use [browserify](http://github.com/substack/node-browserify) to cre
 <script src="/js/jquery.js"></script>
 <script>
 $(function() {
-  var socket = io.connect('/foo');
+  const socket = io.connect('/foo');
 
   $('#file').change(function(e) {
-    var file = e.target.files[0];
-    var stream = ss.createStream();
+    const file = e.target.files[0];
+    const stream = ss.createStream();
 
     // upload a file to the server.
     ss(socket).emit('file', stream, {size: file.size});
@@ -100,8 +103,8 @@ $(function() {
 You can track upload progress like the following:
 
 ```js
-var blobStream = ss.createBlobReadStream(file);
-var size = 0;
+const blobStream = ss.createBlobReadStream(file);
+const size = 0;
 
 blobStream.on('data', function(chunk) {
   size += chunk.length;
@@ -202,7 +205,7 @@ var stream = ss.createStream({
 Create a new readable stream for [Blob](https://developer.mozilla.org/en-US/docs/Web/API/Blob) and [File](https://developer.mozilla.org/en-US/docs/Web/API/File) on browser. See [the docs](http://nodejs.org/api/stream.html) for the details of stream and `options`.
 
 ```js
-var stream = ss.createBlobReadStream(new Blob([1, 2, 3]));
+const stream = ss.createBlobReadStream(new Blob([1, 2, 3]));
 ```
 
 ### ss.Buffer
@@ -210,7 +213,7 @@ var stream = ss.createBlobReadStream(new Blob([1, 2, 3]));
 [Node Buffer](https://nodejs.org/api/buffer.html) class to use on browser, which is exposed for convenience. On Node environment, you should just use normal `Buffer`.
 
 ```js
-var stream = ss.createStream();
+const stream = ss.createStream();
 stream.write(new ss.Buffer([0, 1, 2]));
 ```
 
