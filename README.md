@@ -66,7 +66,9 @@ stream.pipe(fs.createWriteStream('file.txt'));
 
 This module can be used on the browser. To do so, just copy a file to a public directory.
 
-    $ cp node_modules/@wwa/socket.io-stream/socket.io-stream.js somewhere/public/
+```sh
+cp node_modules/@wwa/socket.io-stream/socket.io-stream.js somewhere/public/
+```
 
 You can also use [browserify](http://github.com/substack/node-browserify) to create your own bundle.
 
@@ -184,10 +186,10 @@ ss(socket).on('foo', function(stream) {
 Create a new duplex stream. See [the docs](http://nodejs.org/api/stream.html) for the details of stream and `options`.
 
 ```js
-var stream = ss.createStream();
+const stream = ss.createStream();
 
 // with options
-var stream = ss.createStream({
+const stream = ss.createStream({
   highWaterMark: 1024,
   objectMode: true,
   allowHalfOpen: true
