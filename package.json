@@ -1,6 +1,6 @@
 {
   "name": "@wwa/socket.io-stream",
-  "version": "0.9.1+0.2.0",
+  "version": "0.10.0",
   "description": "stream for socket.io",
   "author": "Naoyuki Kanezawa <naoyuki.kanezawa@gmail.com>",
   "contributors": [
@@ -36,11 +36,11 @@
     "test": "node --test"
   },
   "dependencies": {
-    "debug": "^4.3.4"
+    "debug": "^4.4.1"
   },
   "devDependencies": {
-    "browserify": "^17.0.0",
-    "socket.io": "^4.5.1",
-    "socket.io-client": "^4.5.1"
+    "browserify": "^17.0.1",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1"
   }
 }
