@@ -37,7 +37,7 @@
   ],
   "scripts": {
     "generate-bundle": "browserify index.js -s ss -o socket.io-stream.js",
-    "prepublish": "npm run generate-bundle",
+    "prepack": "npm run generate-bundle",
     "test": "node --test"
   },
   "dependencies": {
